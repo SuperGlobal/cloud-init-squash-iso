@@ -5,7 +5,7 @@ rm -f cloud-init-squash.iso
 rm -f build.log
 rm -rf working/
 
-reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng)
+reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot live-boot-initramfs-tools)
 squash_pkgs="cloud-init,openssh-server"
 
 install_req () {
