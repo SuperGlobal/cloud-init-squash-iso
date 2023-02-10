@@ -1,0 +1,18 @@
+#cloud-config
+hostname: test1
+fqdn: test1.example.com
+manage_etc_hosts: true
+locale: C.UTF-8
+users:
+  - name: debian
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: users, admin
+    home: /home/debian
+    shell: /bin/bash
+    lock_passwd: false
+ssh_pwauth: true 
+disable_root: false
+chpasswd:
+  list: |
+     debian:linux
+  expire: False
