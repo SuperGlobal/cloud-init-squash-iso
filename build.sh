@@ -5,8 +5,8 @@ rm -f cloud-init-squash.iso
 rm -f build.log
 rm -rf working/
 
-reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot live-boot-initramfs-tools)
-squash_pkgs="cloud-init,openssh-server"
+reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot)
+squash_pkgs="cloud-init,openssh-server,sudo"
 
 install_req () {
   echo apt-get install $1 -y
@@ -16,6 +16,22 @@ install_req () {
     echo "Error installing $1" >> build.log
   fi
 }
+
+function trap_ctrlc ()
+{
+    # perform cleanup here
+    echo "Ctrl-C caught...performing clean up"
+    rm -rf working/
+ 
+    # exit shell script with error code 2
+    # if omitted, shell script will continue execution
+    exit 2
+}
+ 
+# initialise trap to call trap_ctrlc function
+# when signal 2 (SIGINT) is received
+trap "trap_ctrlc" 2
+
 
 # iterate through package names, check if install and if not install if required
 for i in "${reqs[@]}"
@@ -35,7 +51,7 @@ cp $(ls -t /boot/initrd* | head -1) working/boot/initrd
 # add separators to log file and generate squashfs
 echo "Writing mmdebstrap output to build.log"
 echo "############################ MMDEBSTRAP LOG BEGIN ############################" >> build.log
-mmdebstrap bullseye working/live/filesystem.squashfs --include=`echo $squash_pkgs` --components=main --customize-hook='mkdir -p $1/var/lib/cloud/seed/nocloud' --customize-hook='copy-in cloud-init/* /var/lib/cloud/seed/nocloud/.' >> build.log 2>&1
+mmdebstrap bullseye working/live/filesystem.squashfs --include=`echo $squash_pkgs` --components=main --customize-hook='mkdir -p $1/var/lib/cloud/seed/nocloud' --customize-hook='copy-in cloud-init/* /var/lib/cloud/seed/nocloud/.' --customize-hook='chroot "$1" systemctl enable ssh' >> build.log 2>&1
 echo "############################ MMDEBSTRAP LOG END ############################" >> build.log
 
 # notice of iso generation, adding separators to log file and generating iso
