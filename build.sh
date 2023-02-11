@@ -5,8 +5,10 @@ rm -f cloud-init-squash.iso
 rm -f build.log
 rm -rf working/
 
-reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot)
+reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot dosfstools grub-efi)
 squash_pkgs="cloud-init,openssh-server,sudo"
+boot_img_data=working/efitemp
+boot_img=working/isolinux/efiboot.img
 
 install_req () {
   echo apt-get install $1 -y
@@ -20,7 +22,9 @@ install_req () {
 function trap_ctrlc ()
 {
     # perform cleanup here
+    set +e
     echo "Ctrl-C caught...performing clean up"
+    umount -ql $boot_img_data
     rm -rf working/
  
     # exit shell script with error code 2
@@ -42,11 +46,33 @@ done
 
 # setup working env, copy isolinux and newest system kernel/initrd to working
 mkdir -p working/{boot,live,isolinux}
-cp -rp isolinux/isolinux.cfg working/isolinux/
+mkdir -p working/boot/grub
+cp -p boot-config/isolinux.cfg working/isolinux/
+cp -p boot-config/grub.cfg working/boot/grub/
 cp -p /usr/lib/ISOLINUX/isolinux.bin working/isolinux/
 cp -p /usr/lib/syslinux/modules/bios/ldlinux.c32 working/isolinux/
 cp $(ls -t /boot/vmlinuz* | head -1) working/boot/vmlinuz
 cp $(ls -t /boot/initrd* | head -1) working/boot/initrd
+
+truncate -s 8M $boot_img
+mkfs.vfat $boot_img >/dev/null 2>&1
+mkdir -p working/efitemp
+mount $boot_img $boot_img_data
+mkdir -p $boot_img_data/efi/boot
+
+grub-mkimage \
+    -C xz \
+    -O x86_64-efi \
+    -p /boot/grub \
+    -o $boot_img_data/efi/boot/bootx64.efi \
+    boot linux search normal configfile \
+    part_gpt btrfs ext2 fat iso9660 loopback \
+    test keystatus gfxmenu regexp probe \
+    efi_gop efi_uga all_video gfxterm font \
+    echo read ls cat png jpeg halt reboot
+
+umount $boot_img_data
+rm -rf $boot_img_data
 
 # add separators to log file and generate squashfs
 echo "Writing mmdebstrap output to build.log"
@@ -57,7 +83,7 @@ echo "############################ MMDEBSTRAP LOG END ##########################
 # notice of iso generation, adding separators to log file and generating iso
 echo "Writing xorriso output to build.log"
 echo "############################ XORRISO LOG BEGIN ############################" >> build.log
-xorriso -as mkisofs -iso-level 3 -full-iso9660-filenames -volid "DEBIAN BULLSEYE CLOUD-INIT" -output "cloud-init-squash.iso" -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin -eltorito-boot isolinux/isolinux.bin -no-emul-boot -boot-load-size 4 -boot-info-table --eltorito-catalog isolinux/isolinux.cat ./working >> build.log 2>&1
+xorriso -as mkisofs -iso-level 3 -full-iso9660-filenames -volid "DEBIAN BULLSEYE CLOUD-INIT" -output "cloud-init-squash.iso" -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin -eltorito-boot isolinux/isolinux.bin -no-emul-boot -boot-load-size 4 -boot-info-table --eltorito-catalog isolinux/isolinux.cat -eltorito-alt-boot -e 'isolinux/efiboot.img' -no-emul-boot -isohybrid-gpt-basdat ./working >> build.log 2>&1
 echo "############################ XORRISO LOG END ############################" >> build.log
 
 # cleaning/removing working env
