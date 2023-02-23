@@ -5,7 +5,7 @@ rm -f cloud-init-squash.iso
 rm -f build.log
 rm -rf working/
 
-reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot dosfstools grub-efi)
+reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot dosfstools grub-efi mtools)
 squash_pkgs="cloud-init,openssh-server,sudo"
 boot_img_data=working/efitemp
 boot_img=working/isolinux/efiboot.img
@@ -56,22 +56,22 @@ cp $(ls -t /boot/initrd* | head -1) working/boot/initrd
 
 truncate -s 8M $boot_img
 mkfs.vfat $boot_img >/dev/null 2>&1
-mkdir -p working/efitemp
-mount $boot_img $boot_img_data
-mkdir -p $boot_img_data/efi/boot
+mkdir -p $boot_img_data
+mmd -i $boot_img ::/efi
+mmd -i $boot_img ::/efi/boot
 
 grub-mkimage \
     -C xz \
     -O x86_64-efi \
     -p /boot/grub \
-    -o $boot_img_data/efi/boot/bootx64.efi \
+    -o $boot_img_data/bootx64.efi \
     boot linux search normal configfile \
     part_gpt btrfs ext2 fat iso9660 loopback \
     test keystatus gfxmenu regexp probe \
     efi_gop efi_uga all_video gfxterm font \
     echo read ls cat png jpeg halt reboot
 
-umount $boot_img_data
+mcopy -i $boot_img $boot_img_data/bootx64.efi ::/efi/boot/bootx64.efi
 rm -rf $boot_img_data
 
 # add separators to log file and generate squashfs
