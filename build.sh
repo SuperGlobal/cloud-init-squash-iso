@@ -5,8 +5,8 @@ rm -f cloud-init-squash.iso
 rm -f build.log
 rm -rf working/
 
-reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot dosfstools grub-efi mtools)
-squash_pkgs="cloud-init,openssh-server,sudo"
+reqs=(isolinux syslinux xorriso mmdebstrap squashfs-tools-ng live-boot dosfstools grub-efi mtools linux-image-amd64 proot)
+squash_pkgs="cloud-init,sudo"
 boot_img_data=working/efitemp
 boot_img=working/isolinux/efiboot.img
 
@@ -24,7 +24,6 @@ function trap_ctrlc ()
     # perform cleanup here
     set +e
     echo "Ctrl-C caught...performing clean up"
-    umount -ql $boot_img_data
     rm -rf working/
  
     # exit shell script with error code 2
@@ -36,8 +35,9 @@ function trap_ctrlc ()
 # when signal 2 (SIGINT) is received
 trap "trap_ctrlc" 2
 
-
 # iterate through package names, check if install and if not install if required
+apt-get update -qq >/dev/null 2>&1
+apt-get install -y -qq apt-utils libterm-readline-gnu-perl dialog >/dev/null 2>&1
 for i in "${reqs[@]}"
 do
     :
@@ -54,6 +54,7 @@ cp -p /usr/lib/syslinux/modules/bios/ldlinux.c32 working/isolinux/
 cp $(ls -t /boot/vmlinuz* | head -1) working/boot/vmlinuz
 cp $(ls -t /boot/initrd* | head -1) working/boot/initrd
 
+# create efi .img file, use grub to generate efi files
 truncate -s 8M $boot_img
 mkfs.vfat $boot_img >/dev/null 2>&1
 mkdir -p $boot_img_data
@@ -77,7 +78,7 @@ rm -rf $boot_img_data
 # add separators to log file and generate squashfs
 echo "Writing mmdebstrap output to build.log"
 echo "############################ MMDEBSTRAP LOG BEGIN ############################" >> build.log
-mmdebstrap bullseye working/live/filesystem.squashfs --include=`echo $squash_pkgs` --components=main --customize-hook='mkdir -p $1/var/lib/cloud/seed/nocloud' --customize-hook='copy-in cloud-init/* /var/lib/cloud/seed/nocloud/.' --customize-hook='chroot "$1" systemctl enable ssh' >> build.log 2>&1
+mmdebstrap bullseye working/live/filesystem.squashfs --include=`echo $squash_pkgs` --components=main --mode=proot --customize-hook='mkdir -p $1/var/lib/cloud/seed/nocloud' --customize-hook='copy-in cloud-init/* /var/lib/cloud/seed/nocloud/.' --customize-hook='chroot "$1" apt-get install -y openssh-server' --customize-hook='chroot "$1" systemctl enable ssh' >> build.log 2>&1
 echo "############################ MMDEBSTRAP LOG END ############################" >> build.log
 
 # notice of iso generation, adding separators to log file and generating iso
